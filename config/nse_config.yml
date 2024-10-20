@@ -1,0 +1,38 @@
+MARKET: NSE
+
+LOGLEVEL: ERROR
+
+PUTSTDMULT: 1.7
+CALLSTDMULT: 2.2
+MINEXPROM: 3.5
+MARGINPERORDER: 350000
+
+# NSE ports and client IDs
+PORT: 3000
+PAPER: 3001
+
+CID: 10
+
+# map IB symbols to extract values from https://niftyindices.com
+IDXHISTSYMMAP:
+  BANKNIFTY: Nifty Bank
+  NIFTY: Nifty 50
+  NIFTYNE50: Nifty Next 50
+
+# map nse symbols to ib formatted symbols
+NSE2IB:
+
+  NIFTY: NIFTY50
+  BANKNIFTY: BANKNIFTY
+  FINNIFTY: NSEFIN
+  MIDCPNIFTY: MIDCAPSEL
+  NIFTYNXT50: NIFTYNE50 # Index only
+  
+  M&M: MM
+  M&MFIN: MMFIN
+  L&TFH: LTFH
+  Nifty 50: NIFTY50 # ! Does not work cos space is stripped
+  Nifty Bank: BANKNIFTY # ! Does not work cos space is stripped
+  
+
+

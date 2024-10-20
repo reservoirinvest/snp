@@ -1,0 +1,23 @@
+MARKET: SNP
+
+LOGLEVEL: ERROR
+
+MAXDTE: 35
+PUTSTDMULT: 1.25
+CALLSTDMULT: 1.5
+MINEXPROM: 1.2
+MARGINPERORDER: 15000
+CCCCP_MIN_DTE: 4
+CCCCP_MAX_DTE: 30 # Covered Call and Cash Covered Put max dte
+CCCCP_STDMULT: 0.85 # CC and CCP standard deviation multiple
+MINOPTPRICE: 0.15 # Minimum option price for covered calls
+
+# NSE ports and client IDs
+PORT: 1300
+PAPER: 1301
+
+CID: 10
+
+  
+
+

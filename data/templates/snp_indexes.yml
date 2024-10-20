@@ -1,0 +1,18 @@
+# CBOE Indexes to add to SnP 500 weeklies
+
+# CBOE: # Can't trade indexes!!!
+  # NANOS: Nanos S&P 500 Index # KIV because it is 1 share per contract, versus 100 for traditional options
+  # SPX: S&P 500 Index # This is a monthly option, not a weekly one. SPY is better
+  # XEO: S&P 100 Index European # Can't trade this index!!!
+  # VIX: Volatility Index 30 day of SPX # Can't trade VIX. It is an index !!!
+  # XSP: Mini S&P 500 Index
+  # OEX: S&P 100 Index
+
+# RUSSELL: # Cannot trade RUT. It is an index!!
+#   RUT: Russell 2000 Index
+
+ARCA:
+  SPY: SPDR S&P 500 ETF TRUST
+
+NYSE:
+  QQQ: INVESCO QQQ TRUST SERIES 1
