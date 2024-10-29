@@ -28,7 +28,7 @@ class Portfolio:
     secType: str = "STK"
     expiry: datetime = datetime.now()
     strike: float = 0.0
-    right: str = "?"
+    right: str = None
     position: float = 0.0
     mktPrice: float = 0.0
     mktVal: float = 0.0
@@ -46,13 +46,13 @@ class OpenOrder:
     secType: str = "STK"
     expiry: datetime = datetime.now()
     strike: float = 0.0
-    right: str = "?"
+    right: str = None
     orderId: int = 0
     order: Order = None
     permId: int = 0
     action: str = "SELL"
     totalQuantity: float = 0.0
-    lmtPrice: float = 0.0
+    lmtPrice: float = 0.0 # Same as xPrice
     status: str = None
 
     def empty(self):
@@ -92,7 +92,11 @@ MINEXPROM = CONFIG.get("MINEXPROM")
 
 # Configure loguru
 logger.remove()  # Remove the default logger
-logger.add(str(ROOT / 'log' / 'snp.log'), level="INFO", rotation="1 MB", retention="7 days")  # Log INFO and ERROR messages to a file
+log_file = ROOT / "log" / "snp.log"
+
+LOGLEVEL = os.getenv("LOGLEVEL", "ERROR")
+logger.add(str(log_file), level=LOGLEVEL, rotation="1 MB", retention="7 days")
+util.logToFile(log_file, level=LOGLEVEL)
 
 class Timer:
     def __init__(self, name: str = ""):
@@ -225,7 +229,12 @@ def append_safe_strikes(df: pd.DataFrame, PUTSTDMULT: float, CALLSTDMULT: float)
 def append_black_scholes(df: pd.DataFrame, risk_free_rate: float) -> pd.DataFrame:
     # Vectorized calculations for Black-Scholes pricing
     S, K, T, r = df["undPrice"].values, df["strike"].values, df["dte"].values / 365, risk_free_rate
-    sigma = df.get('iv', df.get('und_iv', df.get('und_hv', df.get('hv', np.nan))))
+    
+    # Build the sigma series by checking each column in the specified order
+    sigma = df.apply(lambda row: row['iv'] if not pd.isna(row['iv']) 
+                     else row['hv'] if not pd.isna(row['hv']) 
+                     else row['und_iv'] if not pd.isna(row['und_iv']) 
+                     else row['und_hv'], axis=1)
     
     d1 = (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
@@ -837,6 +846,14 @@ def how_many_days_old(file_path: Path) -> float:
     file_age_in_days = file_age.td.total_seconds() / seconds_in_a_day if file_age else None
 
     return file_age_in_days
+    
+def get_prec(v: float, base: float) -> float:
+    try:
+        output = round(round((v) / base) * base, -int(math.floor(math.log10(base))))
+    except Exception:
+        output = None
+
+    return output
 
 if __name__ == "__main__":
     df = make_snp_naked_puts(save=True)

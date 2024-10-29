@@ -5,7 +5,7 @@
 groups = ["default"]
 strategy = ["cross_platform", "inherit_metadata"]
 lock_version = "4.4.1"
-content_hash = "sha256:46cb2f1014c13342ae7ac2ca82ed018f1f42dbe58229cab73c26d646a6f3fbe5"
+content_hash = "sha256:a29a864387ae1b4f6f584340b030eb3f48e64cb325d175ca0b44dd8af93c6f90"
 
 [[package]]
 name = "anyio"
@@ -449,6 +449,16 @@ dependencies = [
 files = [
     {file = "ib_async-1.0.3-py3-none-any.whl", hash = "sha256:3c8742e43084db99a3ecba991bcca3223a05fde270ce9dcac035697bb1855649"},
     {file = "ib_async-1.0.3.tar.gz", hash = "sha256:593691e1a8a1557ac053c601b70bf1527163a517cea3bbfdb2fadfc8a381d15e"},
+]
+
+[[package]]
+name = "ibapi"
+version = "9.81.1.post1"
+requires_python = ">=3.1"
+summary = "Official Interactive Brokers API"
+groups = ["default"]
+files = [
+    {file = "ibapi-9.81.1.post1.tar.gz", hash = "sha256:49f6678bf4cced996920f32ad4b48e6897749ac30ba14a661082285f4ec09cd6"},
 ]
 
 [[package]]

@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pandas as pd
 from from_root import from_root
@@ -15,7 +16,11 @@ config = load_config(market=MARKET)
 
 # Configure loguru
 logger.remove()  # Remove the default logger
-logger.add(str(ROOT / 'data' / 'snp.log'), level="INFO", rotation="1 MB", retention="7 days")  # Log INFO and ERROR messages to a file
+log_file = ROOT / "log" / "covers.log"
+
+LOGLEVEL = os.getenv("LOGLEVEL", "DEBUG")
+logger.add(str(log_file), level=LOGLEVEL, rotation="1 MB", retention="7 days")
+util.logToFile(log_file, level=LOGLEVEL)
 
 # Helper Functions
 def get_positions(secType: str = None) -> pd.DataFrame:
@@ -179,9 +184,4 @@ if __name__ == "__main__":
     pickle_me(covered_calls, ROOT/'data'/'snp_covers.pkl' )
 
     print(covered_calls.drop(columns=['contract', 'iv', 'hv']))
-    
-    # stock_positions = get_positions('STK')
-    # option_positions = get_positions('OPT')
-    # stock_positions_without_covers = remove_covered_positions(stock_positions, option_positions)
 
-    # print(covered_calls)
