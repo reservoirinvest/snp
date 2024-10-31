@@ -21,26 +21,32 @@
 
 ## Symbol `States` with colours
 
-- *tbd* : Unknown status of the position or order. [grey]
-<br/>
-- *reaped* : An option position with a closing order. [purple]
-- *unreaped* : A naked call or put option that doesn't have an open order to reap. [light-yellow]
+- **tbd** : Unknown status of the position/order. [grey]
 <br/>
 
-- *uncovered*: A (long/short) stock with no covered (call/put) buy orders [yellow]
+- **reaped** : An option position with a closing order. [purple]
+- **unreaped** : A naked call or put position that doesn't have an open order//position to reap. [light-yellow]
 <br/>
-- *unsowed*: A symbol with no orders sown. No existing position. [white]
-- *orphaned* : A long call or put option (positive) position that doesn't have an underlying position. [blue]
+
+- **uncovered**: A (long/short) stock with no covers, i.e. (call/put) buy positions/orders  [yellow]
 <br/>
-- *perfect*: A symbol position present that is both covered and protected (or) Option position that is with a reap order. [green]
-<br/>  
-- *unprotected*: Symbol position present but with no protective call or put option and without any option open orders [light-red]
-- *imperfect*: Symbol position present that has no cover or protection options and without any option open orders [light-brown]
-</br>  
-- *sowing* : Naked Option orders present to be sowed. [blue]
-- *covering* : Symbol position is protected with option but not covered and has option open orders to cover [cream]
-- *protecting* : Symbol position is covered with option but not protected and has option open orders to protect [pink]
-- *perfecting* : Symbol position with open orders for covering and protecting, that are not in position yet [light-green]
+
+- **unsowed**: A symbol with no existing positions/orders [white]
+- **non-naked**: A symbol without stock (synthetic), that has more than one option longs/shorts [black]
+- **orphaned** : A single long call or put option (positive) position that doesn't have an underlying position. [blue]
+<br/>
+
+- **perfect**: A symbol position present that is both covered and protected (or) Option position that is with a reap order. [green]
+<br/>
+
+- **unprotected**: Stock position present with cover but with no protective call or put order or position [light-red]
+- **lonely**: Stock position is present but without cover, protective options/orders[light-brown]
+</br> 
+
+- **sowing** : Has naked Option orders that neither covers or protects. [blue]
+- **covering** : Symbol position is protected with option position and being covered with an order [cream]
+- **protecting** : Symbol position is covered with option but not and being protected with an order [pink]
+- **perfecting** : Symbol position with open orders for covering and protecting [light-green]
 
 # Dataclass
 
@@ -91,7 +97,6 @@ class OpenOrder:
    - `underlyings()` ... `price()`, `iv()`, `closest_opt_price()` and `closest_margin()`
    - `chains()` ... all option chains limited by a `MAXDTE` that is typically 50 days.
    - `targets()` ... `target_calls()` based on `CALLSTDMULT` and `target_puts()` based on `PUTSTDMULT` with `xPrice`
-   
 
 2. `opt_closures()` - create closing orders based on profitability scaled to dte from `fill_date()`. 
 
@@ -113,9 +118,9 @@ class OpenOrder:
 
 3. `fill_date()` ... gets the order fill date from /data/xn_history (or) IB report 
 
-4. `und_history()` ... OHLCs of underlyings. Updated in `delta` mode for missing days.
+4. `und_history(delta=False)` ... OHLCs of underlyings. Updated in `delta` mode for missing days.
 
-5. `opt_history()` ... OHLCs of options. Updated in `delta` mode for missing days.
+5. `opt_history(delta=False)` ... OHLCs of options. Updated in `delta` mode for missing days.
 
 6. `offline_margin()`: Option to pick up margins from offline
 
@@ -138,17 +143,17 @@ class OpenOrder:
 10. `quick_pf()` gets the current portfolio positions.
 11. `make_ib_orders()` for making "SELL" or "BUY" orders from a dataframe with `qty` and `xPrice`.
 12. `us_repo_rate()` for repo rate
-13. `convert_to_utc_datetime`
-14. `get_dte()`
-15. `get_an_option_chain()`
-16. `flatten()`
-17. `chunk_me()`
-18. `to_list()`
-19. `get_port`
-20. `clean_ib_util_df()`
-21. `yes_or_no()`
-23. `how_many_days_old()`
-24. `get_prec()`
+13. `convert_to_utc_datetime` for getting option expiry dte correct
+14. `get_dte()` for getting the dte
+15. `get_an_option_chain()` for getting option chains
+16. `flatten()` for flattening nested lists
+17. `chunk_me()` for manipulating ib live requests in chunks and optimize
+18. `to_list()` converts any iterble to a list
+19. `get_ib()` gets an IB connection for a market
+20. `clean_ib_util_df()` cleans util.df to keep only relevant fields. shortens 'expiry' column name 
+21. `yes_or_no()` proceed or not
+23. `how_many_days_old()` gets file age
+24. `get_prec()` sets precision for placing orders. 0.01 for SNP, 0.05 for NSE
 
 <br/>
 
@@ -160,8 +165,8 @@ c. `atm_margin_comm()` gets the atm margin and commission
 
 ### Orchestrator
 An orchestrator will be continuously running to check for the following events.
- - **EVENT**: MARGIN_BREACH (DANGEROUS)
- - **EVENT**: ORDER_FILL
+ - ****EVENT****: MARGIN_BREACH (DANGEROUS)
+ - ****EVENT****: ORDER_FILL
 
 1. If the margin cushion is lower than 10% all open shorts for non-poisitions will be cancelled
 2. If there is an order fill

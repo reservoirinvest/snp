@@ -3,10 +3,9 @@ from ib_async import IB, Stock
 import asyncio
 from from_root import from_root
 
-from snp import get_ib, make_snp_weeklies, make_unqualified_snp_underlyings, qualify_me
+from snp import get_ib, make_snp_weeklies, make_unqualified_snp_underlyings, pickle_me, qualify_me, clean_ib_util_df
 import pandas as pd
 
-from contextlib import asynccontextmanager
 from tqdm import tqdm  # Import tqdm for progress bar
 
 # Apply nest_asyncio to allow nested event loops
@@ -18,52 +17,14 @@ def get_snp_unds() -> list:
     with get_ib(MARKET='SNP') as ib:
         qualified_contracts = ib.run(qualify_me(ib, df.contract.tolist(), desc='Qualifying SNP Unds'))
         return qualified_contracts
-
-
-async def get_a_stock_price(item: str, ib: IB, sleep_time: int = 2) -> dict:
-    if isinstance(item, str):
-        stock_contract = Stock(item, 'SMART', 'USD')
-    else:
-        stock_contract = item
-
-    ticker = ib.reqMktData(stock_contract)  # Call without await
     
-    await asyncio.sleep(sleep_time)  # Use asyncio.sleep instead of ib.sleep
+def process_in_chunks(func, func_params: dict, chunk_size: int = 44) -> dict:
+    """Process payload in chunks using the provided function and its parameters."""
     
-    # Check if ticker.last is NaN and wait for 2 more seconds if true
-    await check_and_adjust_sleep(ticker, sleep_time)
+    if 'payload' not in func_params:
+        raise ValueError("Missing 'payload' in func_params.")
     
-    # Return a dictionary with the symbol and its last price
-    key = item if isinstance(item, str) else stock_contract
-
-    return {key: ticker.last}
-
-async def check_and_adjust_sleep(ticker, sleep_time: int, add_time: int=2):
-    if pd.isna(ticker.last):
-        await asyncio.sleep(sleep_time + add_time)
-
-@asynccontextmanager
-async def ib_context():
-    ib = IB()
-    ib.connect('127.0.0.1', 1300, clientId=1)  # Connect without await
-    try:
-        yield ib
-    finally:
-        ib.disconnect()  # Ensure disconnection
-
-async def stock_prices(contracts: list, ib: IB) -> dict:
-    results = {}
-    tasks = [get_a_stock_price(c, ib) for c in contracts]
-    
-    # Gather results and combine them into a single dictionary
-    for result in await asyncio.gather(*tasks):
-        results.update(result)
-    
-    return results
-
-def process_in_chunks(func, func_params: dict, chunk_size: int = 50) -> dict:
-    """Process items in chunks using the provided function and its parameters."""
-    items = func_params.pop('paramList')  # Extract items from func_params
+    items = func_params.pop('payload')  # Extract items from func_params
     all_results = {}
     
     # Initialize tqdm progress bar
@@ -78,21 +39,87 @@ def process_in_chunks(func, func_params: dict, chunk_size: int = 50) -> dict:
     
     return all_results
 
+async def get_a_stock_price(item: str, ib: IB, sleep_time: int = 2) -> dict:
+    stock_contract = Stock(item, 'SMART', 'USD') if isinstance(item, str) else item
+    ticker = ib.reqMktData(stock_contract)  # Call without await
+    
+    await asyncio.sleep(sleep_time)  # Use asyncio.sleep instead of ib.sleep
+    
+    # Check if ticker.last is NaN and wait if true
+    if pd.isna(ticker.last):
+        await asyncio.sleep(2)
+
+    ib.cancelMktData(stock_contract)
+
+    # Return a dictionary with the symbol and its last price
+    key = item if isinstance(item, str) else stock_contract
+    value = ticker.last if not pd.isna(ticker.last) else ticker.close
+    return {key: value}
+
+async def stock_prices(contracts: list, ib: IB) -> dict:
+    tasks = [get_a_stock_price(item=c, ib=ib) for c in contracts]
+    results = await asyncio.gather(*tasks)  # Gather results directly
+    return {k: v for d in results for k, v in d.items()}  # Combine results into a single dictionary
+
+async def df_prices(ib: IB, stocks: list) -> pd.DataFrame:
+    func_params = {'ib': ib, 'payload': stocks}  # Prepare parameters including ib
+    results = process_in_chunks(func=stock_prices, func_params=func_params, chunk_size=30)
+    if isinstance(list(results)[0], str):
+        df = pd.DataFrame.from_dict(results, orient='index', columns=['price']).rename_axis('symbol')
+    else:
+        df = clean_ib_util_df(list(results.keys()), ist=False)
+        df['price'] = list(results.values())
+    return df
+
+async def get_an_iv(ib: IB, item: str, sleep_time: int = 3, gentick: str = '106, 104') -> dict:
+    stock_contract = Stock(item, 'SMART', 'USD') if isinstance(item, str) else item
+    ticker = ib.reqMktData(stock_contract, genericTickList=gentick)  # Request market data with gentick
+    
+    await asyncio.sleep(sleep_time)  # Use asyncio.sleep instead of ib.sleep
+    
+    # Check if ticker.last is NaN and wait if true
+    if pd.isna(ticker.last):
+        await asyncio.sleep(2)
+
+    # Return a dictionary with the symbol, price, implied volatility, and historical volatility
+    key = item if isinstance(item, str) else stock_contract
+    price = ticker.last if not pd.isna(ticker.last) else ticker.close  # Get last price
+    iv = ticker.impliedVolatility  # Get implied volatility from ticker
+    hv = ticker.histVolatility  # Get historical volatility from ticker
+    return {key: {'price': price, 'iv': iv, 'hv': hv}}  # Return structured data
+
+async def volatilities(contracts: list, ib: IB, sleep_time: int = 3, gentick: str = '106, 104') -> dict:
+    tasks = [get_an_iv(item=c, ib=ib, sleep_time=sleep_time, gentick=gentick) for c in contracts]
+    results = await asyncio.gather(*tasks)  # Gather results directly
+    return {k: v for d in results for k, v in d.items()}  # Combine results into a single dictionary
+
+async def df_iv(ib: IB, stocks: list) -> pd.DataFrame:
+    func_params = {'ib': ib, 'payload': stocks}  # Prepare parameters including ib
+    results = process_in_chunks(func=volatilities, func_params=func_params, chunk_size=30)
+    if isinstance(list(results)[0], str):
+        df_out = pd.DataFrame.from_dict(results, orient='index').rename_axis('symbol')
+    else:
+        df = pd.DataFrame.from_dict(results, orient='index', columns=['price', 'iv', 'hv'])
+        df_out = clean_ib_util_df(df.index.to_list()).join(df.reset_index()[['hv', 'iv', 'price']])
+    return df_out
+
 if __name__ == "__main__":
-    # Example usage with a list of symbols
+
     ROOT = from_root()
-    stocks = get_snp_unds()
+    datapath = ROOT/'data'/'snp_unds.pkl'
 
-    # Use the context manager to handle the IB connection
-    async def main():
-        async with ib_context() as ib:
-            func_params = {'paramList': stocks, 'ib': ib}  # Prepare parameters including ib
-            results = process_in_chunks(stock_prices, func_params)
-            contract = list(results.keys())
-            price = list(results.values())
-            df = pd.DataFrame({'contract': contract, 'price': price})
+    # stocks = get_snp_unds()
+    # pickle_me(stocks, datapath)
 
-            print(df)  # Print the collected results
+    stocks = pd.read_pickle(datapath)
 
-    # Run the main function
-    asyncio.run(main())
+
+    # Run the df_prices function
+    with get_ib('SNP') as ib:
+        # out = asyncio.run(df_prices(ib=ib, stocks=['ABBV', 'ACN']))
+        # out = asyncio.run(df_prices(ib=ib, stocks=stocks[:60]))
+        
+        out = asyncio.run(df_iv(ib=ib, stocks=stocks[:87]))
+        # out = asyncio.run(df_iv(ib=ib, stocks=['ABBV', 'ACN', 'INTC', 'SBUX', 'DG', 'EMR']))
+    print(out)
+    print(f'\nlength of df without prices = {len(out[out.price.isnull()])}')
