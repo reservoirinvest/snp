@@ -1,12 +1,17 @@
 import os
+
 import numpy as np
 import pandas as pd
 from from_root import from_root
-from ib_async import Contract, util
-from snp import append_black_scholes, get_a_price_iv, get_ib, get_mkt_prices, get_open_orders, get_xPrice, how_many_days_old, load_config, make_chains, pickle_me, process_in_chunks, qualify_me, quick_pf, us_repo_rate
+from ib_async import util  # noqa: F811
+from ib_async import Contract
 from loguru import logger
 
-from ib_async import util  # noqa: F811
+from snp import (append_black_scholes, get_a_price_iv, get_ib, get_mkt_prices,
+                 get_open_orders, get_xPrice, how_many_days_old, load_config,
+                 make_chains, pickle_me, process_in_chunks, qualify_me,
+                 quick_pf, us_repo_rate)
+
 util.startLoop()
 
 # Constants and Configuration
@@ -32,7 +37,6 @@ def get_positions(secType: str = None) -> pd.DataFrame:
             else ['symbol', 'position', 'contract', 'mktPrice', 'mktVal', 'avgCost', 'unPnL']
     return (df_pf[df_pf['secType'] == secType][columns]
             .pipe(lambda df: df if not df.empty else pd.DataFrame(columns=columns)))
-
 
 def has_covered_option(row: pd.Series, option_positions: pd.DataFrame) -> bool:
     options = option_positions[option_positions['symbol'] == row['symbol']]
