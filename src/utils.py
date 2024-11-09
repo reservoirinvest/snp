@@ -1,47 +1,25 @@
 import asyncio
-import math
 import os
 import pickle
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable, Optional, Union
 
 import numpy as np
 import pandas as pd
 import pytz
-from tqdm import tqdm
 import yaml
 from dateutil import parser
 from dotenv import find_dotenv, load_dotenv
 from from_root import from_root
 from ib_async import IB, Contract, Order, util
 from loguru import logger
-from scipy.stats import norm
+from tqdm import tqdm
 from tqdm.asyncio import tqdm_asyncio
 
 ROOT = from_root()
 ACTIVESTATUS = os.getenv("ACTIVESTATUS", "")
-
-class Timer:
-    def __init__(self, name: str = ""):
-        self.name = name
-        self._start_time = None
-
-    def start(self):
-        if self._start_time is not None:
-            raise ValueError("Timer is running. Use .stop() to stop it")
-        self._start_time = datetime.now()
-        print(f'\n{self.name} started at {self._start_time.strftime("%d-%b-%Y %H:%M:%S")}')
-
-    def stop(self) -> None:
-        if self._start_time is None:
-            raise ValueError("Timer is not running. Use .start() to start it")
-        elapsed_time = datetime.now() - self._start_time
-        hours, remainder = divmod(elapsed_time.seconds, 3600)
-        minutes, seconds = divmod(remainder, 60)
-        print(f"\n...{self.name} took: {hours:02d}:{minutes:02d}:{seconds:02d}\n")
-        self._start_time = None
 
 @dataclass
 class Portfolio:
@@ -88,7 +66,7 @@ class Timediff:
         self.minutes = minutes
         self.seconds = seconds
 
-def do_in_chunks(func, func_params: dict, chunk_size: int = 44) -> dict:
+def do_in_chunks(func, func_params: dict, chunk_size: int = 44, msg: Optional[str] = None) -> dict:
     """Process payload in chunks using the provided function and its parameters."""
     
     if 'payload' not in func_params:
@@ -97,8 +75,11 @@ def do_in_chunks(func, func_params: dict, chunk_size: int = 44) -> dict:
     items = func_params.pop('payload')  # Extract items from func_params
     all_results = {}
     
+    # Use func.__name__ as default message if msg is None
+    msg = msg or func.__name__
+    
     # Initialize tqdm progress bar
-    with tqdm(total=len(items), desc=f"{func.__name__} in {chunk_size}s", unit="chunk") as pbar:
+    with tqdm(total=len(items), desc=msg, unit="chunk") as pbar:
         for i in range(0, len(items), chunk_size):
             chunk = items[i:i + chunk_size]
             results = asyncio.run(func(chunk, **func_params))  # Call the function and collect results
@@ -121,13 +102,6 @@ def get_pickle(path: Path, print_msg: bool = True):
         if print_msg:
             logger.error(f"File not found: {path}")
         return None
-
-async def qualify_me(ib: IB, data: list, desc: str = "Qualifying contracts") -> list:
-    data = to_list(data)
-    tasks = [asyncio.create_task(ib.qualifyContractsAsync(c), name=c.localSymbol) for c in data]
-    await tqdm_asyncio.gather(*tasks, desc=desc)
-    result = [r for t in tasks for r in t.result()]
-    return result
 
 def to_list(data):
     if isinstance(data, list):
@@ -186,8 +160,7 @@ def clean_ib_util_df(
             "right",
         ]
     ]
-    udf.rename(columns={"lastTradeDateOrContractMonth": "expiry",
-                        "symbol": "ib_symbol"}, inplace=True)
+    udf.rename(columns={"lastTradeDateOrContractMonth": "expiry"}, inplace=True)
 
     # Convert expiry to UTC datetime, if it exists
     if len(udf.expiry.iloc[0]) != 0:
@@ -236,6 +209,13 @@ def get_port(MARKET: str, LIVE: bool=True) -> int:
 
     return port
 
+async def qualify_me(ib: IB, data: list, desc: str = "Qualifying contracts") -> list:
+    data = to_list(data)
+    tasks = [asyncio.create_task(ib.qualifyContractsAsync(c), name=c.localSymbol) for c in data]
+    await tqdm_asyncio.gather(*tasks, desc=desc)
+    result = [r for t in tasks for r in t.result()]
+    return result
+
 def load_config(market: str):
     dotenv_path = find_dotenv()
     load_dotenv(dotenv_path=dotenv_path)
@@ -249,39 +229,6 @@ def load_config(market: str):
             config[key] = value
     
     return config
-
-def append_black_scholes(df: pd.DataFrame, risk_free_rate: float) -> pd.DataFrame:
-    # Vectorized calculations for Black-Scholes pricing
-    S, K, T, r = df["undPrice"].values, df["strike"].values, df["dte"].values / 365, risk_free_rate
-    
-    # Build the sigma series by checking each column in the specified order
-    sigma = df.apply(lambda row: row['iv'] if not pd.isna(row['iv']) 
-                     else row['hv'] if not pd.isna(row['hv']) 
-                     else row['und_iv'] if not pd.isna(row['und_iv']) 
-                     else row['und_hv'], axis=1)
-    
-    d1 = (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
-    d2 = d1 - sigma * np.sqrt(T)
-
-    # Vectorized calculation of option prices
-    df["bsPrice"] = np.where(
-        df["right"] == "C",
-        S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2),
-        K * np.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
-    )
-    return df
-
-def get_closest_strike(df: pd.DataFrame, above: Optional[bool] = None) -> pd.DataFrame:
-    undPrice = df["undPrice"].iloc[0]
-    mask = df["strike"] > undPrice if above else df["strike"] < undPrice if above is not None else None
-
-    # Filter DataFrame based on mask
-    if mask is not None:
-        df = df[mask]
-
-    # Find the closest strike
-    closest_index = (df["strike"] - undPrice).abs().idxmin()
-    return df.loc[[closest_index]]
 
 def quick_pf(ib: IB) -> Union[None, pd.DataFrame]:
     pf = ib.portfolio()
@@ -325,8 +272,7 @@ def get_open_orders(ib, is_active: bool = False) -> pd.DataFrame:
         all_trades_df = all_trades_df.assign(order=order)
 
         all_trades_df.rename(
-            {"lastTradeDateOrContractMonth": "expiry",
-             "symbol": "ib_symbol"}, axis="columns", inplace=True
+            {"lastTradeDateOrContractMonth": "expiry"}, axis="columns", inplace=True
         )
 
         if 'symbol' not in all_trades_df.columns:
@@ -380,14 +326,6 @@ def how_many_days_old(file_path: Path) -> float:
     file_age_in_days = file_age.td.total_seconds() / seconds_in_a_day if file_age else None
 
     return file_age_in_days
-    
-def get_prec(v: float, base: float) -> float:
-    try:
-        output = round(round((v) / base) * base, -int(math.floor(math.log10(base))))
-    except Exception:
-        output = None
-
-    return output
 
 def get_dte(s: Union[pd.Series, datetime]) -> Union[pd.Series, float]:
     now_utc = datetime.now(timezone.utc)

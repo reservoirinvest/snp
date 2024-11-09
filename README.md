@@ -12,7 +12,7 @@
 # Rules
 
 ## Symbol rules
-1. Every valid symbol should have at least one order in the system
+1. Every valid symbol should have at least one order or position in the portfolio
 2. A Symbol without an underlying position should have one naked order
 3. An Underlying position should have two options:
    - For Underlying Put shorts: a Covered Call sell and a Protective Put.
@@ -22,21 +22,19 @@
 ## Symbol `States` with colours
 
 - **tbd** : Unknown status of the position/order. [grey]
+- **cwd** : Covered with protection. [green]
 <br/>
 
-- **reaped** : An option position with a closing order. [purple]
-- **unreaped** : A naked call or put position that doesn't have an open order//position to reap. [light-yellow]
+- **reaped** : An naked option position with a closing order. [green]
+- **unreaped** : A naked call or put position that doesn't have an open order/position to reap. [yellow]
 <br/>
 
 - **uncovered**: A (long/short) stock with no covers, i.e. (call/put) buy positions/orders  [yellow]
 <br/>
 
 - **unsowed**: A symbol with no existing positions/orders [white]
-- **non-naked**: A symbol without stock (synthetic), that has more than one option longs/shorts [black]
+- **synthetic**: A symbol without stock (synthetic / straddle), that has more than one option longs/shorts [black]
 - **orphaned** : A single long call or put option (positive) position that doesn't have an underlying position. [blue]
-<br/>
-
-- **perfect**: A symbol position present that is both covered and protected (or) Option position that is with a reap order. [green]
 <br/>
 
 - **unprotected**: Stock position present with cover but with no protective call or put order or position [light-red]
