@@ -11,7 +11,8 @@ import yaml
 from ib_async import IB, Contract, Index, LimitOrder, Stock, Option, util
 from loguru import logger
 from from_root import from_root
-from src.utils import flatten, get_an_option_chain, get_ib, load_config, qualify_me
+from src.utils import flatten, load_config
+from src.ibfuncs import get_ib, qualify_me
 
 ROOT = from_root()
 MARKET = 'SNP'

@@ -1,7 +1,6 @@
 import asyncio
 import os
 import pickle
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable, Optional, Union
@@ -13,50 +12,12 @@ import yaml
 from dateutil import parser
 from dotenv import find_dotenv, load_dotenv
 from from_root import from_root
-from ib_async import IB, Contract, Order, util
+from ib_async import util
 from loguru import logger
 from tqdm import tqdm
-from tqdm.asyncio import tqdm_asyncio
+
 
 ROOT = from_root()
-ACTIVESTATUS = os.getenv("ACTIVESTATUS", "")
-
-@dataclass
-class Portfolio:
-    conId: int = 0
-    symbol: str = "Dummy"
-    secType: str = "STK"
-    expiry: datetime = datetime.now()
-    strike: float = 0.0
-    right: str = None
-    position: float = 0.0
-    mktPrice: float = 0.0
-    mktVal: float = 0.0
-    avgCost: float = 0.0
-    unPnL: float = 0.0
-    rePnL: float = 0.0
-
-    def empty(self):
-        return pd.DataFrame([self.__dict__]).iloc[0:0]
-
-@dataclass
-class OpenOrder:
-    conId: int = 0
-    symbol: str = "Dummy"
-    secType: str = "STK"
-    expiry: datetime = datetime.now()
-    strike: float = 0.0
-    right: str = None
-    orderId: int = 0
-    order: Order = None
-    permId: int = 0
-    action: str = "SELL"
-    totalQuantity: float = 0.0
-    lmtPrice: float = 0.0 # Same as xPrice
-    status: str = None
-
-    def empty(self):
-        return pd.DataFrame([self.__dict__]).iloc[0:0]
 
 class Timediff:
     def __init__(self, td: timedelta, days: int, hours: int, minutes: int, seconds: float):
@@ -194,11 +155,6 @@ def convert_to_utc_datetime(date_string, eod=False, ist=True):
 
     return dt.astimezone(pytz.UTC)
 
-def get_ib(MARKET: str, cid: int = 10, LIVE: bool = True) -> IB:
-    port = get_port(MARKET=MARKET, LIVE=LIVE)
-    connection = IB().connect(port=port, clientId=cid)
-    return connection
-
 def get_port(MARKET: str, LIVE: bool=True) -> int:
     config = load_config(market=MARKET.upper())
 
@@ -208,13 +164,6 @@ def get_port(MARKET: str, LIVE: bool=True) -> int:
         port = config.get('PAPER')
 
     return port
-
-async def qualify_me(ib: IB, data: list, desc: str = "Qualifying contracts") -> list:
-    data = to_list(data)
-    tasks = [asyncio.create_task(ib.qualifyContractsAsync(c), name=c.localSymbol) for c in data]
-    await tqdm_asyncio.gather(*tasks, desc=desc)
-    result = [r for t in tasks for r in t.result()]
-    return result
 
 def load_config(market: str):
     dotenv_path = find_dotenv()
@@ -229,64 +178,6 @@ def load_config(market: str):
             config[key] = value
     
     return config
-
-def quick_pf(ib: IB) -> Union[None, pd.DataFrame]:
-    pf = ib.portfolio()
-
-    if pf != []:
-        df_pf = util.df(pf)
-        df_pf = (util.df(list(df_pf.contract)).iloc[:, :6]).join(
-            df_pf.drop(columns=["account"])
-        )
-        df_pf = df_pf.rename(
-            columns={
-                "lastTradeDateOrContractMonth": "expiry",
-                "marketPrice": "mktPrice",
-                "marketValue": "mktVal",
-                "averageCost": "avgCost",
-                "unrealizedPNL": "unPnL",
-                "realizedPNL": "rePnL",
-            }
-        )
-    else:
-        df_pf = Portfolio().empty()
-
-    return df_pf
-
-def get_open_orders(ib, is_active: bool = False) -> pd.DataFrame:
-    df_openords = OpenOrder().empty()
-
-    trades = ib.reqAllOpenOrders()
-
-    dfo = pd.DataFrame([])
-
-    if trades:
-        all_trades_df = (
-            clean_ib_util_df([t.contract for t in trades])
-            .join(util.df(t.orderStatus for t in trades))
-            .join(util.df(t.order for t in trades), lsuffix="_")
-        )
-
-        order = pd.Series([t.order for t in trades], name="order")
-
-        all_trades_df = all_trades_df.assign(order=order)
-
-        all_trades_df.rename(
-            {"lastTradeDateOrContractMonth": "expiry"}, axis="columns", inplace=True
-        )
-
-        if 'symbol' not in all_trades_df.columns:
-            if 'contract' in all_trades_df.columns:
-                all_trades_df['symbol'] = all_trades_df['contract'].apply(lambda x: x.symbol)
-            else:
-                raise ValueError("Neither 'symbol' nor 'contract' column found in the DataFrame")
-
-        dfo = all_trades_df[df_openords.columns]
-
-        if is_active:
-            dfo = dfo[dfo.status.isin(ACTIVESTATUS)]
-
-    return dfo
 
 def yes_or_no(question: str, default="n") -> bool:
     while True:
@@ -327,11 +218,20 @@ def how_many_days_old(file_path: Path) -> float:
 
     return file_age_in_days
 
-def get_dte(s: Union[pd.Series, datetime]) -> Union[pd.Series, float]:
+def get_dte(s: Union[pd.Series, datetime], exchange: Optional[str] = None) -> Union[pd.Series, float]:
     now_utc = datetime.now(timezone.utc)
 
     if isinstance(s, pd.Series):
         try:
+            if isinstance(s.iloc[0], str):
+                if exchange == 'NSE':
+                    s = pd.to_datetime(s).dt.tz_localize('Asia/Kolkata').apply(
+                        lambda x: x.replace(hour=15, minute=30, second=0)
+                    )
+                else:
+                    s = pd.to_datetime(s).dt.tz_localize('US/Eastern').apply(
+                        lambda x: x.replace(hour=16, minute=0, second=0)
+                    )
             return (s - now_utc).dt.total_seconds() / (24 * 60 * 60)
         except (TypeError, ValueError):
             return pd.Series([np.nan] * len(s))
@@ -340,34 +240,7 @@ def get_dte(s: Union[pd.Series, datetime]) -> Union[pd.Series, float]:
     else:
         raise TypeError("Input must be a pandas Series or a datetime.datetime object")
 
-async def get_an_option_chain(item:Contract, ib: IB, timeout: int=2):
-    try:
-        chain = await asyncio.wait_for(ib.reqSecDefOptParamsAsync(
-        underlyingSymbol=item.symbol,
-        futFopExchange="",
-        underlyingSecType=item.secType,
-        underlyingConId=item.conId,
-        ), timeout=timeout)
-
-        if chain:
-            chain = chain[-1] if isinstance(chain, list) else chain
-        return chain
-    
-    except asyncio.TimeoutError:
-        logger.error(f"Timeout occurred while getting option chain for {item.symbol}")
-        return None
-
-async def chains(contracts: list, ib: IB) -> dict:
-    tasks = [get_an_option_chain(item=c, ib=ib) for c in contracts]  # Use get_an_option_chain instead
-    results = await asyncio.gather(*tasks)  # Gather results directly
-    return {k: v for d in results for k, v in d.items()}  # Combine results into a single dictionary
-
 if __name__ == '__main__':
     ROOT = from_root()
     datapath = ROOT/'data'/'snp_unds.pkl'
     stocks = pd.read_pickle(datapath)
-
-    with get_ib('SNP') as ib:
-        out = asyncio.run(ib.reqSecDefOptParamsAsynch('INTC', ""))
-
-    print(out)

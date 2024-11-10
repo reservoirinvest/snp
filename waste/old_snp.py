@@ -4,8 +4,6 @@ from snp import make_snp_weeklies
 from utils import get_ib, qualify_me
 
 
-
-
 def us_repo_rate():
     return 5.51
 
