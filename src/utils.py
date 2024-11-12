@@ -7,6 +7,7 @@ from typing import Iterable, Optional, Union
 
 import numpy as np
 import pandas as pd
+import pandas_datareader.data as web
 import pytz
 import yaml
 from dateutil import parser
@@ -14,8 +15,8 @@ from dotenv import find_dotenv, load_dotenv
 from from_root import from_root
 from ib_async import util
 from loguru import logger
+from scipy.stats import norm
 from tqdm import tqdm
-
 
 ROOT = from_root()
 
@@ -239,6 +240,39 @@ def get_dte(s: Union[pd.Series, datetime], exchange: Optional[str] = None) -> Un
         return (s - now_utc).total_seconds() / (24 * 60 * 60)
     else:
         raise TypeError("Input must be a pandas Series or a datetime.datetime object")
+    
+def us_repo_rate():
+    """Risk free US interest rate
+
+    Returns:
+        _type_: float (5.51)
+
+    """
+    tbill_yield = web.DataReader('DGS1MO', 'fred', start=datetime.now() -
+                                 timedelta(days=365), end=datetime.now())['DGS1MO'].iloc[-1]
+    return tbill_yield
+
+def black_scholes(
+    S: float,  # und_price
+    K: float,  # strike
+    T: float,  # dte converted to years-to-expiry
+    r: float,  # risk-free rate
+    sigma: float,  # implied volatility
+    option_type: str,  # Put or Call right
+) -> float:
+    """Black-Scholes Option Pricing Model"""
+
+    d1 = (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
+    d2 = d1 - sigma * np.sqrt(T)
+
+    if option_type == "C":
+        price = S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
+    elif option_type == "P":
+        price = K * np.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
+    else:
+        raise ValueError("Invalid option type. Use 'C' for Call and 'P' for Put.")
+
+    return price
 
 if __name__ == '__main__':
     ROOT = from_root()
