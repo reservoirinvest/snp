@@ -26,6 +26,7 @@ dependencies = [
     "ibapi>=9.81.1.post1",
     "vulture>=2.13",
     "pandas-datareader>=0.10.0",
+    "ibflex>=0.15",
 ]
 requires-python = "==3.11.*"
 readme = "README.md"

@@ -5,7 +5,7 @@
 groups = ["default"]
 strategy = ["cross_platform", "inherit_metadata"]
 lock_version = "4.4.1"
-content_hash = "sha256:fde0fba5e4c1f1ad6fd8ad62df9bcab39cf85699bf36f38597f8f5fe6a8e09e6"
+content_hash = "sha256:88924776751cae24ab0df4c88e21f66dcf0030df67e6e19018e4b0d90ff02cc4"
 
 [[package]]
 name = "anyio"
@@ -459,6 +459,16 @@ summary = "Official Interactive Brokers API"
 groups = ["default"]
 files = [
     {file = "ibapi-9.81.1.post1.tar.gz", hash = "sha256:49f6678bf4cced996920f32ad4b48e6897749ac30ba14a661082285f4ec09cd6"},
+]
+
+[[package]]
+name = "ibflex"
+version = "0.15"
+requires_python = ">=3.7"
+summary = "('Parse Interactive Brokers Flex XML reports and convert to Python types',)"
+groups = ["default"]
+files = [
+    {file = "ibflex-0.15.tar.gz", hash = "sha256:e1ab295ff8d615f1279287d6214752110c7faa9493fcffd7c5519e718d3004a7"},
 ]
 
 [[package]]

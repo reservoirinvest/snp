@@ -1,4 +1,5 @@
 import asyncio
+import math
 import os
 import pickle
 from datetime import datetime, timedelta, timezone
@@ -64,6 +65,15 @@ def get_pickle(path: Path, print_msg: bool = True):
         if print_msg:
             logger.error(f"File not found: {path}")
         return None
+    
+def get_prec(v: float, base: float) -> float:
+    try:
+        output = round(round((v) / base) * base, -int(math.floor(math.log10(base))))
+    except Exception:
+        output = None
+
+    return output
+
 
 def to_list(data):
     if isinstance(data, list):
@@ -85,7 +95,7 @@ def flatten(items):
 def clean_ib_util_df(
     contracts: Union[list, pd.Series],
     eod=True,
-    ist=True
+    ist=False,
     ) -> Union[pd.DataFrame, None]:
     """Cleans ib_async's util.df to keep only relevant columns"""
 
@@ -252,27 +262,57 @@ def us_repo_rate():
                                  timedelta(days=365), end=datetime.now())['DGS1MO'].iloc[-1]
     return tbill_yield
 
-def black_scholes(
-    S: float,  # und_price
-    K: float,  # strike
-    T: float,  # dte converted to years-to-expiry
-    r: float,  # risk-free rate
-    sigma: float,  # implied volatility
-    option_type: str,  # Put or Call right
-) -> float:
-    """Black-Scholes Option Pricing Model"""
-
-    d1 = (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
+def black_scholes(S: float, K: float, T: float, r: float, sigma: float, option_type: str) -> float:
+    """
+    Calculate the Black-Scholes option price.
+    
+    Parameters:
+    -----------
+    S : float
+        Current underlying price
+    K : float
+        Strike price
+    T : float
+        Time to expiration in years
+    r : float
+        Risk-free interest rate (annualized)
+    sigma : float
+        Implied volatility (annualized)
+    option_type : str
+        Option type ('C' for Call, 'P' for Put)
+        
+    Returns:
+    --------
+    float
+        Option price according to Black-Scholes formula
+    """
+    
+    # Input validation
+    if not isinstance(option_type, str) or option_type not in ['C', 'P']:
+        raise ValueError("option_type must be either 'C' for Call or 'P' for Put")
+    if any(x <= 0 for x in [S, K, T, sigma]):
+        raise ValueError("S, K, T, and sigma must be positive")
+    
+    # Handle edge case of very small time to expiration
+    if T < 1e-10:
+        if option_type == 'C':
+            return max(0, S - K)
+        else:
+            return max(0, K - S)
+    
+    # Calculate d1 and d2
+    d1 = (np.log(S/K) + (r + sigma**2/2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
-
-    if option_type == "C":
+    
+    # Calculate Call or Put price
+    if option_type == 'C':
         price = S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
-    elif option_type == "P":
-        price = K * np.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
-    else:
-        raise ValueError("Invalid option type. Use 'C' for Call and 'P' for Put.")
-
+    else:  # Put option
+        price = S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2) + K * np.exp(-r * T) - S
+    
     return price
+
+
 
 if __name__ == '__main__':
     ROOT = from_root()

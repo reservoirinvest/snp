@@ -19,7 +19,6 @@ MARKET = 'SNP'
 ACTIVESTATUS = os.getenv("ACTIVESTATUS", "")
 
 CONFIG = load_config(MARKET)
-MAXDTE = CONFIG.get("MAXDTE")
 
 # Configure loguru
 logger.remove()  # Remove the default logger
